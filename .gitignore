@@ -1,0 +1,26 @@
+# --- MASTER GITIGNORE FOR MSBSVET ---
+
+# Secret Files (Crucial!)
+.env
+**/.env
+Backend/.env
+Frontend/.env
+
+# Python (Backend)
+**/__pycache__/
+**/*.py[cod]
+**/venv/
+Backend/venv/
+
+# Node/React (Frontend)
+**/node_modules/
+**/dist/
+Frontend/node_modules/
+Frontend/dist/
+
+# Logs and OS Trash
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
