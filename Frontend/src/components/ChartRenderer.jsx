@@ -16,6 +16,7 @@ const renderMultilineLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, perc
   const targetX = cx + radius * Math.cos(-midAngle * RADIAN);
   const targetY = cy + radius * Math.sin(-midAngle * RADIAN);
   
+  const safeName = name ? String(name) : 'Unknown';
   const words = name.split(' ');
   const isRightSide = targetX > cx;
 
@@ -55,13 +56,34 @@ const renderMultilineLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, perc
 };
 
 export default function ChartRenderer({ data, config }) {
-  const { type, x, y } = config;
+  const safeConfig = config || { type: 'bar' };
+  let { type, x, y } = safeConfig;
 
   // Helper to ensure we don't crash if PBI_THEME hasn't loaded colors yet
+  
+  const keys = data && data.length > 0 ? Object.keys(data[0]) : [];
+  if (!keys.includes(x)) {
+    x = keys.find(k => typeof data[0][k] === 'string') || keys[0];
+  }
+  if (!keys.includes(y)) {
+    y = keys.find(k => typeof data[0][k] === 'number') || keys[keys.length - 1];
+  }
+
+  const cleanData = data.map(item => {
+    let rawVal = item[y];
+    let cleanVal = rawVal;
+    if (typeof rawVal === 'string') {
+      const parsed = parseFloat(rawVal.replace(/,/g, ''));
+      if (!isNaN(parsed)) cleanVal = parsed;
+    }
+    return { ...item, [y]: cleanVal, [x]: item[x] || 'Unknown' };
+  });
+
   const themeColors =
     PBI_THEME?.colors?.length > 0
       ? PBI_THEME.colors
       : ['#f57c00', '#ff9800'];
+
 
   const renderInnerChart = () => {
     switch (type) {

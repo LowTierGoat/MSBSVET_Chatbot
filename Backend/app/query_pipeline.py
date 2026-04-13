@@ -23,34 +23,22 @@ def run_pipeline(
     # ── SHORT CIRCUIT ────────────────────────────────────────────────────────
     # User just wants to change the visual type of data already on screen.
     # Skip the DB entirely — reuse whatever is already in context.
-    if intent == "reformat_ui":
-        if not context or not context.get("results"):
-            raise PipelineError(
-                "reformat_ui",
-                "No data on screen to reformat. Please run a query first.",
-            )
-
-        chart_type = params["chart_type"]
-        is_table = chart_type == "table"
-
-        # Carry forward x/y from the previous chart config if one exists
-        prev_config = context.get("chart_config") or {}
-
+    # --- SHORT CIRCUIT: REUSE DATA ---
+    if intent == "reformat_ui" and context:
+        ctype = params['chart_type']
+        old_config = context.get("chart_config") or {} # <--- Safety fallback
+        
         return {
             "question": question,
-            "sql": context.get("sql"),
+            "ui_directive": "render_data_table" if ctype == "table" else "render_chart",
             "results": context["results"],
+            "sql": context.get("sql"),
             "row_count": context.get("row_count"),
-            "ui_directive": "render_data_table" if is_table else "render_chart",
-            "chart_config": (
-                None
-                if is_table
-                else {
-                    "type": chart_type,
-                    "x": prev_config.get("x"),
-                    "y": prev_config.get("y"),
-                }
-            ),
+            "chart_config": {
+                "type": ctype, 
+                "x": old_config.get("x"), # Safe get
+                "y": old_config.get("y")  # Safe get
+            } if ctype != "table" else None
         }
 
     # ── TEXT FALLBACK ────────────────────────────────────────────────────────

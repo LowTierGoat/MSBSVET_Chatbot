@@ -16,34 +16,47 @@ export default function App() {
   const [history, setHistory] = useState([])
 
   async function handleQuery(q) {
-    setLoading(true)
-    setError(null)
-    setResponse(null)
+  setLoading(true)
+  setError(null)
+  setResponse(null)
 
-    try {
-      const res = await fetch('http://localhost:8000/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q }),
-      })
+  const userMsg = { role: "user", content: q }
 
-      const data = await res.json()
+  try {
+    const res = await fetch('http://localhost:8000/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        question: q,
+        history: history,
+        context: response
+      }),
+    })
 
-      if (!res.ok) {
-        // Handle FastAPI detail errors
-        const errorMsg =
-          data.detail?.error || data.detail || 'Something went wrong'
-        throw new Error(errorMsg)
-      }
+    const data = await res.json()
 
-      setResponse(data)
-    } catch (err) {
-      console.error('Frontend Error:', err)
-      setError(err.message)
-    } finally {
-      setLoading(false)
+    if (!res.ok) {
+      const errorMsg =
+        data.detail?.error || data.detail || 'Something went wrong'
+      throw new Error(errorMsg)
     }
+
+    setResponse(data)
+
+    // Save conversation history
+    setHistory(prev => [
+      ...prev,
+      userMsg,
+      { role: "assistant", content: `Action: ${data.ui_directive}` }
+    ])
+
+  } catch (err) {
+    console.error('Frontend Error:', err)
+    setError(err.message)
+  } finally {
+    setLoading(false)
   }
+}
 
   return (
     <div
