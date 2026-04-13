@@ -1,26 +1,23 @@
 /* src/App.css */
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
 
+/* src/App.css */
 :root {
-  --bg-base:       #0f0f0f;
-  --bg-panel:      #161616;
-  --bg-raised:     #1e1e1e;
-  --bg-hover:      #252525;
-  --accent:        #f57c00;
-  --accent-dim:    #7a3e00;
-  --accent-glow:   rgba(245, 124, 0, 0.15);
-  --text-primary:  #f0ece4;
-  --text-secondary:#8a8070;
-  --text-muted:    #3d3830;
-  --border:        #2a2520;
-  --border-accent: #f57c00;
-  --success:       #4caf50;
-  --error:         #ef5350;
-  --font-display:  'Syne', sans-serif;
-  --font-body:     'DM Sans', sans-serif;
-  --font-mono:     'JetBrains Mono', monospace;
-  --radius:        6px;
-  --transition:    all 0.2s ease;
+  /* Replace these hex codes with the ones from your PBI JSON */
+  --pbi-color-1: #118DFF; /* Primary Accent */
+  --pbi-color-2: #12239E;
+  --pbi-color-3: #E66C37;
+  --pbi-color-4: #6B007B;
+  --pbi-color-5: #E044A7;
+  --pbi-color-6: #744EC2;
+  --pbi-color-7: #D9B300;
+  --pbi-color-8: #22a19a;
+
+  /* Map your app variables to the PBI theme */
+  --accent: var(--pbi-color-1);
+  --accent-dim: var(--pbi-color-2);
+  --border: #2e303a; /* Match PBI background contrast */
+  --bg-panel: #16171d; 
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }

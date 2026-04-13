@@ -1,0 +1,292 @@
+import {
+  BarChart, Bar, LineChart, Line, AreaChart, Area,
+  PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+} from 'recharts';
+import { PBI_THEME } from '../theme';
+
+/**
+ * CUSTOM MULTILINE LABELER
+ * Handles long names like "Chhatrapati Sambhajinagar" by splitting them into lines.
+ */
+// --- UPDATED MULTILINE LABELER ---
+const renderMultilineLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name, x, y }) => {
+  const RADIAN = Math.PI / 180;
+  const radius = outerRadius * 1.25; 
+  const targetX = cx + radius * Math.cos(-midAngle * RADIAN);
+  const targetY = cy + radius * Math.sin(-midAngle * RADIAN);
+  
+  const words = name.split(' ');
+  const isRightSide = targetX > cx;
+
+  // We use PBI_THEME.text directly here to avoid the "black text" bug
+  const textColor = PBI_THEME.text || "#f0ece4"; 
+  const mutedColor = PBI_THEME.muted || "#8a8070";
+
+  return (
+    <text 
+      x={targetX} 
+      y={targetY} 
+      fill={textColor} // <--- CHANGE THIS
+      textAnchor={isRightSide ? 'start' : 'end'} 
+      dominantBaseline="central"
+      style={{ fontSize: '11px', fontWeight: 500, fontFamily: 'var(--font-mono)' }}
+    >
+      {words.map((word, i) => (
+        <tspan 
+          x={targetX} 
+          dy={i === 0 ? 0 : 14} 
+          key={i}
+          fill={textColor} // <--- AND THIS
+        >
+          {word}
+        </tspan>
+      ))}
+      <tspan 
+        x={targetX} 
+        dy={14} 
+        fill={mutedColor} // <--- AND THIS
+        fontSize="10"
+      >
+        {`(${(percent * 100).toFixed(0)}%)`}
+      </tspan>
+    </text>
+  );
+};
+
+export default function ChartRenderer({ data, config }) {
+  const { type, x, y } = config;
+
+  // Helper to ensure we don't crash if PBI_THEME hasn't loaded colors yet
+  const themeColors =
+    PBI_THEME?.colors?.length > 0
+      ? PBI_THEME.colors
+      : ['#f57c00', '#ff9800'];
+
+  const renderInnerChart = () => {
+    switch (type) {
+      case 'pie': {
+        // --- SMART GROUPING LOGIC ---
+        const MAX_SLICES = 6;
+        let processedData = [...data].sort((a, b) => b[y] - a[y]);
+
+        if (processedData.length > MAX_SLICES) {
+          const topSlices = processedData.slice(0, MAX_SLICES);
+          const otherSlices = processedData.slice(MAX_SLICES);
+          const otherSum = otherSlices.reduce(
+            (sum, item) => sum + item[y],
+            0
+          );
+
+          processedData = [
+            ...topSlices,
+            { [x]: 'Others', [y]: otherSum }
+          ];
+        }
+
+        return (
+          <PieChart>
+            <Pie
+              data={processedData}
+              dataKey={y}
+              nameKey={x}
+              cx="50%"
+              cy="40%" // Move chart up to make room for legend
+              outerRadius={80}
+              innerRadius={50}
+              paddingAngle={3}
+              // Only show multiline label if the slice is > 5%
+              label={(props) =>
+                props.percent > 0.05
+                  ? renderMultilineLabel(props)
+                  : null
+              }
+              labelLine={false} // Cleaner look for many slices
+            >
+              {processedData.map((entry, index) => (
+                <Cell
+                  key={`cell-${index}`}
+                  fill={themeColors[index % themeColors.length]}
+                  stroke="var(--bg-panel)"
+                  strokeWidth={2}
+                />
+              ))}
+            </Pie>
+
+            <Tooltip
+              contentStyle={{
+                background: 'var(--bg-raised)',
+                border: '1px solid var(--border)',
+                borderRadius: '4px'
+              }}
+            />
+
+            <Legend
+              verticalAlign="bottom"
+              align="center"
+              layout="horizontal"
+              iconType="circle"
+              wrapperStyle={{
+                paddingTop: '20px',
+                fontSize: '10px',
+                maxWidth: '100%',
+                lineHeight: '20px'
+              }}
+            />
+          </PieChart>
+        );
+      }
+
+      case 'line':
+        return (
+          <LineChart data={data}>
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="var(--border)"
+              vertical={false}
+            />
+            <XAxis
+              dataKey={x}
+              stroke="var(--text-secondary)"
+              fontSize={11}
+              tickLine={false}
+              axisLine={false}
+              dy={10}
+            />
+            <YAxis
+              stroke="var(--text-secondary)"
+              fontSize={11}
+              tickLine={false}
+              axisLine={false}
+            />
+            <Tooltip
+              contentStyle={{
+                background: 'var(--bg-raised)',
+                border: '1px solid var(--border)'
+              }}
+            />
+            <Line
+              type="monotone"
+              dataKey={y}
+              stroke={PBI_THEME.accent}
+              strokeWidth={3}
+              dot={{
+                fill: PBI_THEME.accent,
+                r: 4,
+                strokeWidth: 2,
+                stroke: 'var(--bg-panel)'
+              }}
+              activeDot={{ r: 6, strokeWidth: 0 }}
+            />
+          </LineChart>
+        );
+
+      case 'area':
+        return (
+          <AreaChart data={data}>
+            <defs>
+              <linearGradient id="colorArea" x1="0" y1="0" x2="0" y2="1">
+                <stop
+                  offset="5%"
+                  stopColor={PBI_THEME.accent}
+                  stopOpacity={0.3}
+                />
+                <stop
+                  offset="95%"
+                  stopColor={PBI_THEME.accent}
+                  stopOpacity={0}
+                />
+              </linearGradient>
+            </defs>
+
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="var(--border)"
+              vertical={false}
+            />
+            <XAxis
+              dataKey={x}
+              stroke="var(--text-secondary)"
+              fontSize={11}
+              axisLine={false}
+              tickLine={false}
+            />
+            <YAxis
+              stroke="var(--text-secondary)"
+              fontSize={11}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip />
+            <Area
+              type="monotone"
+              dataKey={y}
+              stroke={PBI_THEME.accent}
+              fillOpacity={1}
+              fill="url(#colorArea)"
+            />
+          </AreaChart>
+        );
+
+      default:
+        return (
+          <BarChart
+            data={data}
+            margin={{ top: 20, right: 30, left: 0, bottom: 0 }}
+          >
+            <CartesianGrid
+              strokeDasharray="3 3"
+              stroke="var(--border)"
+              vertical={false}
+            />
+            <XAxis
+              dataKey={x}
+              stroke="var(--text-secondary)"
+              fontSize={11}
+              tickLine={false}
+              axisLine={false}
+              dy={10}
+            />
+            <YAxis
+              stroke="var(--text-secondary)"
+              fontSize={11}
+              tickLine={false}
+              axisLine={false}
+            />
+            <Tooltip
+              cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+              contentStyle={{
+                background: 'var(--bg-raised)',
+                border: '1px solid var(--border)'
+              }}
+            />
+            <Bar
+              dataKey={y}
+              fill={PBI_THEME.accent}
+              radius={[4, 4, 0, 0]}
+              barSize={32}
+            />
+          </BarChart>
+        );
+    }
+  };
+
+  return (
+    <div
+      style={{
+        height: '480px', // Extra height for the legend and labels
+        width: '100%',
+        marginTop: '24px',
+        padding: '24px',
+        background: 'rgba(255,255,255,0.01)',
+        border: '1px solid var(--border)',
+        borderRadius: 'var(--radius)',
+        boxShadow: 'inset 0 0 20px rgba(0,0,0,0.2)'
+      }}
+    >
+      <ResponsiveContainer width="100%" height="100%">
+        {renderInnerChart()}
+      </ResponsiveContainer>
+    </div>
+  );
+}
