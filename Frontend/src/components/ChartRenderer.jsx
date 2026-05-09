@@ -10,44 +10,63 @@ import { PBI_THEME } from '../theme';
  * Handles long names like "Chhatrapati Sambhajinagar" by splitting them into lines.
  */
 // --- UPDATED MULTILINE LABELER ---
-const renderMultilineLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, name, x, y }) => {
+const renderMultilineLabel = ({
+  cx,
+  cy,
+  midAngle,
+  innerRadius,
+  outerRadius,
+  percent,
+  name,
+}) => {
   const RADIAN = Math.PI / 180;
-  const radius = outerRadius * 1.25; 
+
+  // Keep labels inside bounds
+  const radius = outerRadius * 1.25;
+
   const targetX = cx + radius * Math.cos(-midAngle * RADIAN);
   const targetY = cy + radius * Math.sin(-midAngle * RADIAN);
-  
-  const safeName = name ? String(name) : 'Unknown';
-  const words = name.split(' ');
+
   const isRightSide = targetX > cx;
 
-  // We use PBI_THEME.text directly here to avoid the "black text" bug
-  const textColor = PBI_THEME.text || "#f0ece4"; 
-  const mutedColor = PBI_THEME.muted || "#8a8070";
+  // Safer handling of name
+  const safeName = name ? String(name) : "Unknown";
+  const words = safeName.split(" ");
+
+  // Theme colors with fallbacks
+  const textColor = PBI_THEME?.text || "#1e293b";   // deep navy fallback
+  const mutedColor = PBI_THEME?.muted || "#475569"; // softer gray
 
   return (
-    <text 
-      x={targetX} 
-      y={targetY} 
-      fill={textColor} // <--- CHANGE THIS
-      textAnchor={isRightSide ? 'start' : 'end'} 
+    <text
+      x={targetX}
+      y={targetY}
+      fill={textColor}
+      textAnchor={isRightSide ? "start" : "end"}
       dominantBaseline="central"
-      style={{ fontSize: '11px', fontWeight: 500, fontFamily: 'var(--font-mono)' }}
+      style={{
+        fontSize: "11px",
+        fontWeight: 600,
+        fontFamily: "var(--font-mono)",
+      }}
     >
       {words.map((word, i) => (
-        <tspan 
-          x={targetX} 
-          dy={i === 0 ? 0 : 14} 
+        <tspan
           key={i}
-          fill={textColor} // <--- AND THIS
+          x={targetX}
+          dy={i === 0 ? 0 : 14}
+          fill={textColor}
         >
           {word}
         </tspan>
       ))}
-      <tspan 
-        x={targetX} 
-        dy={14} 
-        fill={mutedColor} // <--- AND THIS
+
+      <tspan
+        x={targetX}
+        dy={14}
+        fill={mutedColor}
         fontSize="10"
+        fontWeight="400"
       >
         {`(${(percent * 100).toFixed(0)}%)`}
       </tspan>
@@ -249,6 +268,31 @@ export default function ChartRenderer({ data, config }) {
             />
           </AreaChart>
         );
+      
+      // Add this case to the switch inside ChartRenderer.jsx
+      case 'multi_pie':
+        return (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            {config.y.map((colName, idx) => (
+              <div key={idx} style={{ height: '300px', textAlign: 'center' }}>
+                <div style={{ fontSize: '10px', fontWeight: 'bold', color: '#1a4188' }}>{colName.replace('_', ' ').toUpperCase()}</div>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie 
+                      data={data.filter(d => d[colName] > 0)} 
+                      dataKey={colName} 
+                      nameKey={config.x} 
+                      cx="50%" cy="50%" outerRadius={60} label 
+                    >
+                      {data.map((_, i) => <Cell key={i} fill={['#1a4188', '#ff9933', '#2e7d32'][i % 3]} />)}
+                    </Pie>
+                    <Tooltip />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ))}
+          </div>
+        );      
 
       default:
         return (
@@ -292,6 +336,36 @@ export default function ChartRenderer({ data, config }) {
         );
     }
   };
+
+  if (type === 'grouped_pie') {
+    // Find unique categories (e.g., "AUTO-CAD" and "LICENTIATE...")
+    const groups = [...new Set(data.map(item => item[config.groupBy]))];
+    
+    return (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px', width: '100%', padding: '20px', background: '#fcfcfc', borderRadius: '6px' }}>
+        {groups.map((group, idx) => {
+          const groupData = data.filter(d => d[config.groupBy] === group);
+          return (
+            <div key={idx} style={{ height: '350px', textAlign: 'center', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: '#1e40af', marginBottom: '15px', minHeight: '30px' }}>
+                {String(group).toUpperCase()}
+              </div>
+              <div style={{ flex: 1 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={groupData} dataKey={y} nameKey={x} cx="50%" cy="45%" outerRadius={70} innerRadius={45} paddingAngle={4} label={renderMultilineLabel}>
+                      {groupData.map((_, i) => <Cell key={i} fill={['#1e40af', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6'][i % 5]} stroke="#fff" strokeWidth={2} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div

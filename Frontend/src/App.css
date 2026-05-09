@@ -1,45 +1,66 @@
-/* src/App.css */
-@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap');
-
-/* src/App.css */
 :root {
-  /* Replace these hex codes with the ones from your PBI JSON */
-  --pbi-color-1: #118DFF; /* Primary Accent */
-  --pbi-color-2: #12239E;
-  --pbi-color-3: #E66C37;
-  --pbi-color-4: #6B007B;
-  --pbi-color-5: #E044A7;
-  --pbi-color-6: #744EC2;
-  --pbi-color-7: #D9B300;
-  --pbi-color-8: #22a19a;
+  /* Official MSBSVET Palette */
+  --pbi-blue: #1a4188;       /* Primary Govt Blue */
+  --pbi-orange: #ff9933;     /* Saffron Accent */
+  --bg-light: #f4f7fa;       /* Page Background */
+  --card-bg: #ffffff;        
+  --text-main: #333333;
+  --text-muted: #666666;
+  --border-color: #d1d9e6;
+  --accent-blue: #0056b3;
 
-  /* Map your app variables to the PBI theme */
-  --accent: var(--pbi-color-1);
-  --accent-dim: var(--pbi-color-2);
-  --border: #2e303a; /* Match PBI background contrast */
-  --bg-panel: #16171d; 
+  --font-main: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --radius: 4px; /* Govt websites prefer sharper corners */
 }
-
-* { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  background: var(--bg-base);
-  color: var(--text-primary);
-  font-family: var(--font-body);
-  min-height: 100vh;
+  background: var(--bg-light);
+  color: var(--text-main);
+  font-family: var(--font-main);
 }
 
-/* Subtle grid texture on background */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(245,124,0,0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(245,124,0,0.03) 1px, transparent 1px);
-  background-size: 40px 40px;
-  pointer-events: none;
-  z-index: 0;
+.chat-window {
+  background: var(--card-bg);
+  border-top: 4px solid var(--pbi-blue); /* Distinct Govt border */
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  border-radius: var(--radius);
 }
 
-#root { position: relative; z-index: 1; }
+.response-card {
+  background: #ffffff;
+  border: 1px solid #d1d9e6;
+  border-radius: 4px;
+  padding: 32px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  overflow: hidden; /* Prevents chart bleed-out */
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+.recharts-responsive-container {
+  overflow: visible !important; 
+}
+
+.results-table-container {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid #d1d9e6;
+  margin-top: 10px;
+}
+
+table {
+  border: 1px solid var(--border-color);
+}
+th {
+  background-color: var(--pbi-blue) !important;
+  color: white !important;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #eee;
+  color: #333;
+}

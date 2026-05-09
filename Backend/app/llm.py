@@ -1,5 +1,5 @@
 import json
-from openai import OpenAI
+from openai import OpenAI, BadRequestError
 from app.config import settings
 from app.schema_context import SCHEMA_CONTEXT
 
@@ -9,88 +9,153 @@ TOOLS = [
     {
         "type": "function",
         "function": {
-            "name": "render_data_table",
-            "description": "Use ONLY for NEW questions requiring a fresh database query to show a list.",
+            "name": "query_database",
+            "description": (
+                "Execute a SQL SELECT query to retrieve data from the MSBSVET database. "
+                "Use when the question requires actual data — counts, lists, comparisons, "
+                "rankings, or any factual lookup. Always prefer course_name ILIKE over "
+                "exact course_code matching unless the user explicitly provides a verified code."
+            ),
             "parameters": {
                 "type": "object",
-                "properties": {"sql": {"type": "string"}},
-                "required": ["sql"]
+                "properties": {
+                    "sql": {"type": "string", "description": "Valid PostgreSQL SELECT query"},
+                    "reasoning": {"type": "string", "description": "One sentence: why this SQL answers the question"}
+                },
+                "required": ["sql", "reasoning"]
             }
         }
     },
     {
         "type": "function",
         "function": {
-            "name": "render_chart",
-            "description": "Use ONLY for NEW questions requiring a fresh database query to visualize data. DO NOT use this if the user just wants to change the chart type of data already on screen.",
+            "name": "answer_directly",
+            "description": (
+                "Answer the user directly without querying the database. Use for: "
+                "general knowledge questions, explanations of terms, follow-ups on "
+                "already-visible data, greetings, clarifications, or anything that "
+                "does not require fresh data from the DB."
+            ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "sql": {"type": "string"},
-                    "chart_type": {"type": "string", "enum": ["bar", "line", "area", "pie"]},
-                    "x_axis": {"type": "string", "description": "Labels"},
-                    "y_axis": {"type": "string", "description": "Numbers"}
+                    "answer": {"type": "string"}
                 },
-                "required": ["sql", "chart_type", "x_axis", "y_axis"]
+                "required": ["answer"]
             }
         }
     },
     {
         "type": "function",
         "function": {
-            "name": "reformat_ui",
-            "description": "CRITICAL: Use this WHENEVER the user asks to change the visual style (e.g., 'make it a pie chart', 'show as table', 'change to line graph') of the current data. DO NOT generate SQL.",
+            "name": "clarify",
+            "description": "Ask the user a clarifying question when the request is genuinely ambiguous and cannot be reasonably inferred.",
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "chart_type": {"type": "string", "enum": ["bar", "line", "area", "pie", "table"]}
+                    "question": {"type": "string"}
                 },
-                "required": ["chart_type"]
+                "required": ["question"]
             }
         }
     }
 ]
 
-def analyze_and_generate(question: str, history: list = [], context: dict = None) -> dict:
+
+def _build_messages(question: str, history: list, context: dict) -> list:
     messages = [{"role": "system", "content": SCHEMA_CONTEXT}]
-    
-    # 1. Add the Notepad (History)
-    if history: 
+
+    if history:
         messages.extend(history)
-    
-    # 2. THE LOUD WHISTLE: Put the rule right before the user's question
-    if context and context.get("results"):
-        cols = list(context['results'][0].keys())
-        system_alert = (
-            f"SYSTEM ALERT: Data is already on screen with columns: {cols}. "
-            f"If the next user message is requesting a visual change (e.g., 'pie chart', 'table'), "
-            f"you MUST use 'reformat_ui'. DO NOT write SQL."
+
+    if context and isinstance(context.get("data"), list) and context["data"]:
+        cols = list(context["data"][0].keys()) if context["data"] else []
+        preview = context["data"][:3]
+        context_hint = (
+            f"[SYSTEM: Data is currently visible to the user. "
+            f"Columns: {cols}. Preview: {preview}. "
+            f"Previous answer: {context.get('answer', '')}. "
+            f"If the user is asking to reformat, filter, or discuss this data, "
+            f"use answer_directly or reformat it — do NOT re-query the database.]"
         )
-        messages.append({"role": "system", "content": system_alert})
-    
-    # 3. Add the actual question
+        messages.append({"role": "user", "content": context_hint})
+        messages.append({"role": "assistant", "content": "Understood, I have the current data context."})
+
     messages.append({"role": "user", "content": question})
+    return messages
+
+
+def compose_answer(question: str, results: list, history: list) -> str:
+    """Pass 2: given raw DB results, ask the LLM to write a natural language answer."""
+    preview = results[:50]  # cap to avoid token overflow
+    row_count = len(results)
+
+    prompt = (
+        f'The user asked: "{question}"\n\n'
+        f"The database returned {row_count} row(s):\n{json.dumps(preview, indent=2, default=str)}\n\n"
+        f"Write a clear, specific, natural language answer summarizing the key takeaways. "
+        f"CRITICAL RULE: Do NOT generate markdown tables, ASCII art, or text-based charts. " # <--- ADD THIS
+        f"The UI will automatically render interactive tables and charts below your text. " # <--- ADD THIS
+        f"Just provide a 2-3 sentence summary of the numbers."
+    )
+
+    response = client.chat.completions.create(
+        model=settings.llm_model,
+        temperature=0,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    return response.choices[0].message.content
+
+
+def analyze_and_generate(question: str, history: list = [], context: dict = None) -> dict:
+    messages = _build_messages(question, history, context)
 
     print(f"\n--- DEBUG: CONTEXT SENT TO LLM ---")
     print(f"History length: {len(history)}")
     print(f"Context present: {context is not None}")
 
-    response = client.chat.completions.create(
-        model=settings.llm_model,
-        temperature=0, # Keep it strictly logical
-        messages=messages,
-        tools=TOOLS,
-        tool_choice="auto" 
-    )
+    try:
+        response = client.chat.completions.create(
+            model=settings.llm_model,
+            temperature=0,
+            messages=messages,
+            tools=TOOLS,
+            tool_choice="auto",   # model decides — no forced tool use
+        )
+    except BadRequestError as e:
+        # Model generated raw SQL without wrapping in a tool call
+        # Recover from the failed_generation field
+        try:
+            error_body = e.response.json()
+            failed_gen = error_body.get("error", {}).get("failed_generation", "")
+            if failed_gen.strip().upper().startswith(("SELECT", "WITH")):
+                print(f"--- RECOVERED from tool_use_failed, extracting raw SQL ---")
+                return {
+                    "intent": "query_database",
+                    "parameters": {
+                        "sql": failed_gen.strip(),
+                        "reasoning": "Recovered from failed tool call"
+                    }
+                }
+        except Exception:
+            pass
+        raise  # re-raise if we can't recover
 
     msg = response.choices[0].message
-    
+
     print(f"\n--- LLM DECISION ---")
-    if msg.tool_calls:
-        tool = msg.tool_calls[0]
-        print(f"TOOL CALLED: {tool.function.name}")
-        print(f"ARGUMENTS: {tool.function.arguments}")
-        return {"intent": tool.function.name, "parameters": json.loads(tool.function.arguments)}
-    
-    print(f"NO TOOL CALLED. Text: {msg.content[:50]}...")
-    return {"intent": "text", "parameters": {"text": msg.content}}
+
+    # Model chose not to call any tool — treat as direct answer
+    if not msg.tool_calls:
+        print(f"NO TOOL CALLED. Treating as direct answer.")
+        return {
+            "intent": "answer_directly",
+            "parameters": {"answer": msg.content or "I'm not sure how to answer that."}
+        }
+
+    tool = msg.tool_calls[0]
+    params = json.loads(tool.function.arguments)
+    print(f"TOOL CALLED: {tool.function.name}")
+    print(f"ARGUMENTS: {tool.function.arguments}")
+
+    return {"intent": tool.function.name, "parameters": params}

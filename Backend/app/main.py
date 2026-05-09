@@ -1,10 +1,7 @@
-# app/main.py
-
 from typing import Optional, Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-
 from app.query_pipeline import run_pipeline, PipelineError
 
 
@@ -16,14 +13,15 @@ class QueryRequest(BaseModel):
 
 class QueryResponse(BaseModel):
     question: str
-    ui_directive: str
+    answer: str                        # always present — natural language response
+    data: Optional[Any] = None         # row data if DB was queried
     sql: Optional[str] = None
     row_count: Optional[int] = None
-    results: Any = None
-    chart_config: Optional[dict] = None
+    suggested_viz: Optional[dict] = None
+    chart_config: Optional[dict] = None  # same as suggested_viz, for frontend compat
 
 
-app = FastAPI(title="Chatbot Query API")
+app = FastAPI(title="MSBSVET Chatbot API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -43,7 +41,4 @@ def query(request: QueryRequest):
     try:
         return run_pipeline(request.question, request.history, request.context)
     except PipelineError as e:
-        raise HTTPException(
-            status_code=400,
-            detail={"error": e.message},
-        )
+        raise HTTPException(status_code=400, detail={"error": e.message})
